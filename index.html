@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Interaktif - Sistem Pembelajaran</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-spinner {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- Login Page -->
+    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md fade-in">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Quiz Interaktif</h1>
+                <p class="text-gray-600">Silakan pilih nama Anda untuk memulai</p>
+            </div>
+            
+            <div class="space-y-3 mb-6">
+                <button onclick="showAdminLogin()" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                    🔐 Login Guru/Admin
+                </button>
+                
+                <div class="border-t pt-4">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">Pilih Nama Siswa:</h3>
+                    <div id="studentList" class="space-y-2">
+                        <!-- Student buttons will be generated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm mx-4">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Login Admin</h3>
+            <input type="password" id="adminPassword" placeholder="Masukkan password admin" 
+                   class="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+            <div class="flex space-x-3">
+                <button onclick="loginAdmin()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg">
+                    Login
+                </button>
+                <button onclick="closeAdminLogin()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-2 px-4 rounded-lg">
+                    Batal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Quiz Page -->
+    <div id="quizPage" class="hidden min-h-screen p-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Quiz - <span id="studentName"></span></h2>
+                    <button onclick="logout()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">
+                        Logout
+                    </button>
+                </div>
+                <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                    <p class="text-sm text-blue-800">
+                        <strong>Petunjuk:</strong> Jawab semua pertanyaan dengan teliti. Anda dapat mengedit jawaban sebanyak 1 kali setelah submit.
+                    </p>
+                </div>
+            </div>
+
+            <form id="quizForm" class="space-y-6">
+                <!-- Questions will be generated here -->
+            </form>
+
+            <div class="bg-white rounded-2xl shadow-xl p-6 mt-6">
+                <button type="button" onclick="submitQuiz()" id="submitBtn" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-200">
+                    Submit Quiz
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Page -->
+    <div id="resultsPage" class="hidden min-h-screen p-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="text-center mb-6">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Hasil Quiz</h2>
+                    <p class="text-xl text-gray-600">Siswa: <span id="resultStudentName" class="font-semibold"></span></p>
+                </div>
+
+                <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-6 rounded-xl mb-6 text-center">
+                    <h3 class="text-2xl font-bold mb-2">Skor Anda</h3>
+                    <p class="text-4xl font-bold" id="finalScore">0/0</p>
+                    <p class="text-lg mt-2" id="percentage">0%</p>
+                </div>
+                
+                <div id="analysisSummary" class="p-4 bg-gray-100 rounded-lg mb-6 hidden">
+                    <h4 class="text-lg font-semibold text-gray-800 mb-2">Analisis AI ✨</h4>
+                    <p id="analysisText" class="text-gray-700 text-sm"></p>
+                </div>
+
+                <div id="detailedResults" class="space-y-4 mb-6">
+                    <!-- Detailed results will be shown here -->
+                </div>
+
+                <div class="flex flex-wrap gap-4 justify-center">
+                    <button onclick="analyzeAnswers()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg">
+                        ✨ Analisis Jawaban
+                    </button>
+                    <button onclick="downloadSingleResults()" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg">
+                        📥 Download Excel
+                    </button>
+                    <button onclick="editAnswers()" id="editBtn" class="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg">
+                        ✏️ Edit Jawaban (1x)
+                    </button>
+                    <button onclick="logout()" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg">
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPage" class="hidden min-h-screen p-4">
+        <div class="max-w-7xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gray-800">Panel Admin - Dashboard Guru</h2>
+                    <button onclick="logout()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="bg-blue-500 text-white p-6 rounded-xl">
+                    <h3 class="text-xl font-semibold mb-2">Total Siswa</h3>
+                    <p class="text-3xl font-bold" id="totalStudents">0</p>
+                </div>
+                <div class="bg-green-500 text-white p-6 rounded-xl">
+                    <h3 class="text-xl font-semibold mb-2">Total Soal</h3>
+                    <p class="text-3xl font-bold" id="totalQuestions">0</p>
+                </div>
+                <div class="bg-purple-500 text-white p-6 rounded-xl">
+                    <h3 class="text-xl font-semibold mb-2">Quiz Selesai</h3>
+                    <p class="text-3xl font-bold" id="completedQuizzes">0</p>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="bg-white rounded-2xl shadow-xl mb-6">
+                <div class="border-b border-gray-200">
+                    <nav class="flex space-x-8 px-6">
+                        <button onclick="showTab('students')" id="studentsTab" class="py-4 px-2 border-b-2 border-blue-500 text-blue-600 font-semibold">
+                            👥 Kelola Siswa
+                        </button>
+                        <button onclick="showTab('questions')" id="questionsTab" class="py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-semibold">
+                            📝 Kelola Soal
+                        </button>
+                        <button onclick="showTab('results')" id="resultsTab" class="py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-semibold">
+                            📊 Hasil Quiz
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Students Management Tab -->
+                <div id="studentsTabContent" class="p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-2xl font-bold text-gray-800">Kelola Data Siswa</h3>
+                        <button onclick="showAddStudentModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                            ➕ Tambah Siswa
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-4 py-3 text-left">No</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Nama Siswa</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Status Quiz</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <!-- Students will be listed here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Questions Management Tab -->
+                <div id="questionsTabContent" class="p-6 hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-2xl font-bold text-gray-800">Kelola Soal Quiz</h3>
+                        <div class="flex gap-2">
+                             <button onclick="showAIQuestionGeneratorModal()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg">
+                                 ✨ Buat Soal AI
+                             </button>
+                             <button onclick="showAddQuestionModal()" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                                 ➕ Tambah Soal
+                             </button>
+                        </div>
+                    </div>
+                    <div id="questionsList" class="space-y-4">
+                        <!-- Questions will be listed here -->
+                    </div>
+                </div>
+
+                <!-- Results Tab -->
+                <div id="resultsTabContent" class="p-6 hidden">
+                    <div class="flex justify-between items-center mb-6">
+                         <h3 class="text-2xl font-bold text-gray-800">Hasil Quiz Semua Siswa</h3>
+                         <button onclick="downloadAllResults()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                             📥 Download Semua Hasil
+                         </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Nama Siswa</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Skor</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Persentase</th>
+                                    <th class="border border-gray-300 px-4 py-3 text-left">Waktu Submit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allResultsTableBody">
+                                <!-- All results will be listed here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Tambah Siswa Baru</h3>
+            <input type="text" id="newStudentName" placeholder="Nama lengkap siswa" 
+                   class="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <div class="flex space-x-3">
+                <button onclick="addStudent()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                    Tambah
+                </button>
+                <button onclick="closeAddStudentModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-2 px-4 rounded-lg">
+                    Batal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Question Modal -->
+    <div id="addQuestionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold text-gray-800 mb-4" id="modalQuestionTitle">Tambah Soal Baru</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Pertanyaan:</label>
+                    <textarea id="newQuestionText" rows="3" placeholder="Tulis pertanyaan di sini..." 
+                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Pilihan Jawaban:</label>
+                    <div class="space-y-2">
+                        <input type="text" id="optionA" placeholder="Pilihan A" class="w-full p-2 border border-gray-300 rounded-lg">
+                        <input type="text" id="optionB" placeholder="Pilihan B" class="w-full p-2 border border-gray-300 rounded-lg">
+                        <input type="text" id="optionC" placeholder="Pilihan C" class="w-full p-2 border border-gray-300 rounded-lg">
+                        <input type="text" id="optionD" placeholder="Pilihan D" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Jawaban Benar:</label>
+                    <select id="correctAnswer" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex space-x-3 mt-6">
+                <button id="saveQuestionBtn" onclick="saveQuestion()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                    Simpan Soal
+                </button>
+                <button onclick="closeAddQuestionModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-2 px-4 rounded-lg">
+                    Batal
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI Question Generator Modal -->
+    <div id="aiQuestionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">✨ Buat Soal dengan AI</h3>
+            <p class="text-sm text-gray-600 mb-4">Masukkan topik atau materi yang ingin Anda jadikan soal.</p>
+            <input type="text" id="aiQuestionTopic" placeholder="Contoh: Sejarah Indonesia, Biologi Sel, Kimia Dasar" 
+                   class="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            <div class="flex space-x-3">
+                <button onclick="generateAIQuestion()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg">
+                    Buat Soal
+                </button>
+                <button onclick="closeAIQuestionModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-2 px-4 rounded-lg">
+                    Batal
+                </button>
+            </div>
+            <div id="aiQuestionResult" class="mt-4 hidden p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                 <h4 class="font-semibold text-gray-800 mb-2">Soal yang Dihasilkan</h4>
+                 <div id="aiGeneratedQuestion"></div>
+                 <button onclick="saveAIQuestion()" class="mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                     ✅ Simpan Soal
+                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Dialog/Alert -->
+    <div id="customAlert" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm mx-4 text-center">
+            <h3 class="text-xl font-bold text-gray-800 mb-4" id="alertTitle">Pesan</h3>
+            <p id="alertMessage" class="text-gray-700 mb-6"></p>
+            <button onclick="closeAlert()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Data Storage
+        let students = JSON.parse(localStorage.getItem('students')) || [
+            "Awad Abdullah Thalib",
+            "Fathir", 
+            "Gavrilla Muzaifal Syah A",
+            "Muhammd Hafiy Haidar",
+            "Muhammad Machdy Roestam",
+            "Muhammad Hamzah Afrizal",
+            "Nabil Yusuf Rabbani",
+            "Raffa Alfarizqi Prabowo",
+            "Rexford Ernest Gilbran"
+        ];
+
+        let questions = JSON.parse(localStorage.getItem('questions')) || [
+            {
+                id: 1,
+                question: "Apa ibu kota Indonesia?",
+                options: ["Jakarta", "Surabaya", "Bandung", "Medan"],
+                correct: "A"
+            },
+            {
+                id: 2,
+                question: "Berapa hasil dari 15 + 25?",
+                options: ["35", "40", "45", "50"],
+                correct: "B"
+            },
+            {
+                id: 3,
+                question: "Siapa presiden pertama Indonesia?",
+                options: ["Suharto", "Soekarno", "Habibie", "Megawati"],
+                correct: "B"
+            }
+        ];
+
+        let quizResults = JSON.parse(localStorage.getItem('quizResults')) || {};
+        let editCount = JSON.parse(localStorage.getItem('editCount')) || {};
+        let currentStudent = null;
+        let currentUser = null;
+        let userType = null; // 'student' or 'admin'
+        let editingQuestionId = null;
+        let aiGeneratedQuestion = null;
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        // Utility functions for localStorage persistence
+        function saveData(key, data) {
+            localStorage.setItem(key, JSON.stringify(data));
+        }
+
+        function loadData(key, defaultValue) {
+            return JSON.parse(localStorage.getItem(key)) || defaultValue;
+        }
+
+        // Custom alert function
+        function showAlert(message, title = "Pesan") {
+            document.getElementById('alertTitle').textContent = title;
+            document.getElementById('alertMessage').textContent = message;
+            document.getElementById('customAlert').classList.remove('hidden');
+            document.getElementById('customAlert').classList.add('flex');
+        }
+
+        function closeAlert() {
+            document.getElementById('customAlert').classList.add('hidden');
+            document.getElementById('customAlert').classList.remove('flex');
+        }
+
+        // Initialize the application
+        function init() {
+            loadStudentButtons();
+            updateAdminStats();
+        }
+
+        // Load student buttons
+        function loadStudentButtons() {
+            const studentList = document.getElementById('studentList');
+            studentList.innerHTML = '';
+            
+            students.forEach((student, index) => {
+                const button = document.createElement('button');
+                button.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 text-left';
+                button.textContent = `${index + 1}. ${student}`;
+                button.onclick = () => loginStudent(student);
+                studentList.appendChild(button);
+            });
+        }
+
+        // Student login
+        function loginStudent(studentName) {
+            currentStudent = studentName;
+            currentUser = studentName;
+            userType = 'student';
+            
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('quizPage').classList.remove('hidden');
+            document.getElementById('studentName').textContent = studentName;
+            
+            loadQuiz();
+        }
+
+        // Admin login functions
+        function showAdminLogin() {
+            document.getElementById('adminLoginModal').classList.remove('hidden');
+            document.getElementById('adminLoginModal').classList.add('flex');
+        }
+
+        function closeAdminLogin() {
+            document.getElementById('adminLoginModal').classList.add('hidden');
+            document.getElementById('adminLoginModal').classList.remove('flex');
+            document.getElementById('adminPassword').value = '';
+        }
+
+        function loginAdmin() {
+            const password = document.getElementById('adminPassword').value;
+            if (password === 'w4hyu') {
+                currentUser = 'admin';
+                userType = 'admin';
+                
+                document.getElementById('loginPage').classList.add('hidden');
+                document.getElementById('adminPage').classList.remove('hidden');
+                closeAdminLogin();
+                loadAdminPanel();
+            } else {
+                showAlert('Password salah!');
+            }
+        }
+
+        // Load quiz for student
+        function loadQuiz() {
+            const form = document.getElementById('quizForm');
+            form.innerHTML = '';
+            
+            // Check if student has already submitted
+            if (quizResults[currentStudent]) {
+                showResults();
+                return;
+            }
+            
+            questions.forEach((q, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'bg-white rounded-xl shadow-lg p-6 fade-in';
+                questionDiv.style.animationDelay = `${index * 0.1}s`;
+                
+                questionDiv.innerHTML = `
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                        ${index + 1}. ${q.question}
+                    </h3>
+                    <div class="space-y-3">
+                        ${q.options.map((option, optIndex) => `
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition duration-200">
+                                <input type="radio" name="question_${q.id}" value="${String.fromCharCode(65 + optIndex)}" 
+                                         class="mr-3 text-blue-600 focus:ring-blue-500">
+                                <span class="text-gray-700">${String.fromCharCode(65 + optIndex)}. ${option}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+                
+                form.appendChild(questionDiv);
+            });
+        }
+
+        // Submit quiz
+        function submitQuiz() {
+            const formData = new FormData(document.getElementById('quizForm'));
+            const answers = {};
+            let score = 0;
+            
+            // Check if all questions are answered
+            if (questions.some(q => !formData.get(`question_${q.id}`))) {
+                showAlert('Harap jawab semua pertanyaan sebelum submit!');
+                return;
+            }
+            
+            // Calculate score
+            questions.forEach(q => {
+                const answer = formData.get(`question_${q.id}`);
+                answers[q.id] = answer;
+                if (answer === q.correct) {
+                    score++;
+                }
+            });
+            
+            // Save results
+            quizResults[currentStudent] = {
+                answers: answers,
+                score: score,
+                total: questions.length,
+                percentage: Math.round((score / questions.length) * 100),
+                timestamp: new Date().toLocaleString('id-ID')
+            };
+            
+            // Initialize edit count
+            if (!editCount[currentStudent]) {
+                editCount[currentStudent] = 0;
+            }
+            
+            saveData('quizResults', quizResults);
+            saveData('editCount', editCount);
+            
+            showResults();
+        }
+
+        // Show results
+        function showResults() {
+            document.getElementById('quizPage').classList.add('hidden');
+            document.getElementById('resultsPage').classList.remove('hidden');
+            
+            const result = quizResults[currentStudent];
+            document.getElementById('resultStudentName').textContent = currentStudent;
+            document.getElementById('finalScore').textContent = `${result.score}/${result.total}`;
+            document.getElementById('percentage').textContent = `${result.percentage}%`;
+            
+            // Show detailed results
+            const detailedResults = document.getElementById('detailedResults');
+            detailedResults.innerHTML = '';
+            
+            questions.forEach((q, index) => {
+                const userAnswer = result.answers[q.id];
+                const isCorrect = userAnswer === q.correct;
+                
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `p-4 rounded-lg border-l-4 ${isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
+                
+                resultDiv.innerHTML = `
+                    <h4 class="font-semibold text-gray-800 mb-2">${index + 1}. ${q.question}</h4>
+                    <p class="text-sm text-gray-600 mb-1">Jawaban Anda: <span class="font-medium">${userAnswer || 'Tidak dijawab'}</span></p>
+                    <p class="text-sm text-gray-600">Jawaban Benar: <span class="font-medium">${q.correct}</span></p>
+                    <p class="text-sm font-medium ${isCorrect ? 'text-green-600' : 'text-red-600'} mt-1">
+                        ${isCorrect ? '✓ Benar' : '✗ Salah'}
+                    </p>
+                `;
+                
+                detailedResults.appendChild(resultDiv);
+            });
+            
+            // Update edit button
+            const editBtn = document.getElementById('editBtn');
+            if (editCount[currentStudent] >= 1) {
+                editBtn.disabled = true;
+                editBtn.textContent = '✏️ Edit Sudah Digunakan';
+                editBtn.className = 'bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg cursor-not-allowed';
+            } else {
+                editBtn.disabled = false;
+                editBtn.textContent = '✏️ Edit Jawaban (1x)';
+                editBtn.className = 'bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg';
+            }
+        }
+
+        // Edit answers
+        function editAnswers() {
+            if (editCount[currentStudent] >= 1) {
+                showAlert('Anda sudah menggunakan kesempatan edit!');
+                return;
+            }
+            
+            editCount[currentStudent]++;
+            saveData('editCount', editCount);
+            
+            // Clear current results and reload quiz
+            delete quizResults[currentStudent];
+            saveData('quizResults', quizResults);
+            
+            document.getElementById('resultsPage').classList.add('hidden');
+            document.getElementById('quizPage').classList.remove('hidden');
+            
+            loadQuiz();
+        }
+
+        // Download single student results as Excel
+        function downloadSingleResults() {
+            const result = quizResults[currentStudent];
+            const data = [];
+            
+            // Header
+            data.push(['Nama Siswa', currentStudent]);
+            data.push(['Skor', `${result.score}/${result.total}`]);
+            data.push(['Persentase', `${result.percentage}%`]);
+            data.push(['Waktu Submit', result.timestamp]);
+            data.push([]);
+            data.push(['No', 'Pertanyaan', 'Jawaban Anda', 'Jawaban Benar', 'Status']);
+            
+            // Questions and answers
+            questions.forEach((q, index) => {
+                const userAnswer = result.answers[q.id];
+                const isCorrect = userAnswer === q.correct;
+                data.push([
+                    index + 1,
+                    q.question,
+                    userAnswer || 'Tidak dijawab',
+                    q.correct,
+                    isCorrect ? 'Benar' : 'Salah'
+                ]);
+            });
+            
+            // Create workbook and download
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Hasil Quiz');
+            XLSX.writeFile(wb, `Hasil_Quiz_${currentStudent.replace(/\s+/g, '_')}.xlsx`);
+        }
+        
+        // Admin Panel Functions
+        function loadAdminPanel() {
+            updateAdminStats();
+            loadStudentsTable();
+            loadQuestionsList();
+            loadAllResults();
+        }
+
+        function updateAdminStats() {
+            document.getElementById('totalStudents').textContent = students.length;
+            document.getElementById('totalQuestions').textContent = questions.length;
+            document.getElementById('completedQuizzes').textContent = Object.keys(quizResults).length;
+        }
+
+        function showTab(tabName) {
+            // Hide all tabs
+            document.getElementById('studentsTabContent').classList.add('hidden');
+            document.getElementById('questionsTabContent').classList.add('hidden');
+            document.getElementById('resultsTabContent').classList.add('hidden');
+            
+            // Remove active class from all tabs
+            document.getElementById('studentsTab').className = 'py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-semibold';
+            document.getElementById('questionsTab').className = 'py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-semibold';
+            document.getElementById('resultsTab').className = 'py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-semibold';
+            
+            // Show selected tab
+            document.getElementById(`${tabName}TabContent`).classList.remove('hidden');
+            document.getElementById(`${tabName}Tab`).className = 'py-4 px-2 border-b-2 border-blue-500 text-blue-600 font-semibold';
+        }
+
+        function loadStudentsTable() {
+            const tbody = document.getElementById('studentsTableBody');
+            tbody.innerHTML = '';
+            
+            students.forEach((student, index) => {
+                const hasCompleted = quizResults[student] ? 'Selesai' : 'Belum';
+                const statusClass = quizResults[student] ? 'text-green-600' : 'text-orange-600';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border border-gray-300 px-4 py-3">${index + 1}</td>
+                    <td class="border border-gray-300 px-4 py-3">${student}</td>
+                    <td class="border border-gray-300 px-4 py-3 ${statusClass} font-semibold">${hasCompleted}</td>
+                    <td class="border border-gray-300 px-4 py-3">
+                        <button onclick="deleteStudent('${student}')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">
+                            🗑️ Hapus
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function showAddStudentModal() {
+            document.getElementById('addStudentModal').classList.remove('hidden');
+            document.getElementById('addStudentModal').classList.add('flex');
+        }
+        
+        function closeAddStudentModal() {
+            document.getElementById('addStudentModal').classList.add('hidden');
+            document.getElementById('addStudentModal').classList.remove('flex');
+            document.getElementById('newStudentName').value = '';
+        }
+        
+        function addStudent() {
+            const newName = document.getElementById('newStudentName').value.trim();
+            if (newName && !students.includes(newName)) {
+                students.push(newName);
+                saveData('students', students);
+                loadStudentButtons();
+                loadStudentsTable();
+                updateAdminStats();
+                closeAddStudentModal();
+            } else {
+                showAlert('Nama siswa tidak boleh kosong atau sudah ada!');
+            }
+        }
+        
+        function deleteStudent(studentName) {
+            const index = students.indexOf(studentName);
+            if (index > -1) {
+                students.splice(index, 1);
+                saveData('students', students);
+                
+                // Also remove their results
+                delete quizResults[studentName];
+                saveData('quizResults', quizResults);
+
+                loadStudentButtons();
+                loadStudentsTable();
+                loadAllResults();
+                updateAdminStats();
+            }
+        }
+
+        function loadQuestionsList() {
+            const container = document.getElementById('questionsList');
+            container.innerHTML = '';
+            
+            questions.forEach((q, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'bg-gray-50 p-4 rounded-lg border';
+                
+                questionDiv.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <h4 class="text-lg font-semibold text-gray-800">Soal ${index + 1}</h4>
+                        <div class="space-x-2">
+                            <button onclick="editQuestion(${q.id})" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                ✏️ Edit
+                            </button>
+                            <button onclick="deleteQuestion(${q.id})" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">
+                                🗑️ Hapus
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-gray-700 mb-3">${q.question}</p>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        ${q.options.map((option, optIndex) => `
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">${String.fromCharCode(65 + optIndex)}.</span>
+                                <span class="${q.correct === String.fromCharCode(65 + optIndex) ? 'text-green-600 font-semibold' : 'text-gray-600'}">${option}</span>
+                                ${q.correct === String.fromCharCode(65 + optIndex) ? ' ✓' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                container.appendChild(questionDiv);
+            });
+        }
+        
+        function showAddQuestionModal() {
+            editingQuestionId = null;
+            document.getElementById('modalQuestionTitle').textContent = 'Tambah Soal Baru';
+            document.getElementById('saveQuestionBtn').textContent = 'Tambah Soal';
+            document.getElementById('newQuestionText').value = '';
+            document.getElementById('optionA').value = '';
+            document.getElementById('optionB').value = '';
+            document.getElementById('optionC').value = '';
+            document.getElementById('optionD').value = '';
+            document.getElementById('correctAnswer').value = 'A';
+            document.getElementById('addQuestionModal').classList.remove('hidden');
+            document.getElementById('addQuestionModal').classList.add('flex');
+        }
+
+        function closeAddQuestionModal() {
+            document.getElementById('addQuestionModal').classList.add('hidden');
+            document.getElementById('addQuestionModal').classList.remove('flex');
+        }
+        
+        function saveQuestion() {
+            const questionText = document.getElementById('newQuestionText').value.trim();
+            const options = [
+                document.getElementById('optionA').value.trim(),
+                document.getElementById('optionB').value.trim(),
+                document.getElementById('optionC').value.trim(),
+                document.getElementById('optionD').value.trim()
+            ];
+            const correct = document.getElementById('correctAnswer').value;
+            
+            if (!questionText || options.some(opt => !opt)) {
+                showAlert('Semua kolom harus diisi!');
+                return;
+            }
+            
+            if (editingQuestionId) {
+                // Edit existing question
+                const index = questions.findIndex(q => q.id === editingQuestionId);
+                if (index !== -1) {
+                    questions[index] = {
+                        id: editingQuestionId,
+                        question: questionText,
+                        options: options,
+                        correct: correct
+                    };
+                }
+            } else {
+                // Add new question
+                const newId = questions.length > 0 ? Math.max(...questions.map(q => q.id)) + 1 : 1;
+                questions.push({
+                    id: newId,
+                    question: questionText,
+                    options: options,
+                    correct: correct
+                });
+            }
+            
+            saveData('questions', questions);
+            loadQuestionsList();
+            updateAdminStats();
+            closeAddQuestionModal();
+        }
+
+        function editQuestion(id) {
+            editingQuestionId = id;
+            const questionToEdit = questions.find(q => q.id === id);
+            
+            if (questionToEdit) {
+                document.getElementById('modalQuestionTitle').textContent = 'Edit Soal';
+                document.getElementById('saveQuestionBtn').textContent = 'Simpan Perubahan';
+                document.getElementById('newQuestionText').value = questionToEdit.question;
+                document.getElementById('optionA').value = questionToEdit.options[0];
+                document.getElementById('optionB').value = questionToEdit.options[1];
+                document.getElementById('optionC').value = questionToEdit.options[2];
+                document.getElementById('optionD').value = questionToEdit.options[3];
+                document.getElementById('correctAnswer').value = questionToEdit.correct;
+                
+                document.getElementById('addQuestionModal').classList.remove('hidden');
+                document.getElementById('addQuestionModal').classList.add('flex');
+            }
+        }
+        
+        function deleteQuestion(id) {
+            const originalLength = questions.length;
+            questions = questions.filter(q => q.id !== id);
+            
+            if (questions.length < originalLength) {
+                saveData('questions', questions);
+                loadQuestionsList();
+                updateAdminStats();
+            }
+        }
+
+        function loadAllResults() {
+            const tbody = document.getElementById('allResultsTableBody');
+            tbody.innerHTML = '';
+            
+            Object.keys(quizResults).forEach(studentName => {
+                const result = quizResults[studentName];
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td class="border border-gray-300 px-4 py-3">${studentName}</td>
+                    <td class="border border-gray-300 px-4 py-3">${result.score} / ${result.total}</td>
+                    <td class="border border-gray-300 px-4 py-3">${result.percentage}%</td>
+                    <td class="border border-gray-300 px-4 py-3">${result.timestamp}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function downloadAllResults() {
+            const data = [];
+            const headers = ['Nama Siswa', 'Skor', 'Persentase', 'Waktu Submit'];
+            questions.forEach((q, index) => {
+                headers.push(`Pertanyaan ${index + 1}: ${q.question}`);
+                headers.push(`Jawaban Siswa`);
+                headers.push(`Status`);
+            });
+            data.push(headers);
+            
+            Object.keys(quizResults).forEach(studentName => {
+                const result = quizResults[studentName];
+                const row = [
+                    studentName,
+                    `${result.score}/${result.total}`,
+                    `${result.percentage}%`,
+                    result.timestamp
+                ];
+                
+                questions.forEach(q => {
+                    const userAnswer = result.answers[q.id] || 'Tidak dijawab';
+                    const isCorrect = userAnswer === q.correct;
+                    row.push(q.options[q.correct.charCodeAt(0) - 65]);
+                    row.push(q.options[userAnswer.charCodeAt(0) - 65] || 'N/A');
+                    row.push(isCorrect ? 'Benar' : 'Salah');
+                });
+                data.push(row);
+            });
+            
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Hasil Semua Siswa');
+            XLSX.writeFile(wb, `Hasil_Quiz_Semua_Siswa.xlsx`);
+        }
+
+        // Logout function
+        function logout() {
+            currentStudent = null;
+            currentUser = null;
+            userType = null;
+            document.getElementById('quizPage').classList.add('hidden');
+            document.getElementById('resultsPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
+            document.getElementById('loginPage').classList.remove('hidden');
+            loadStudentButtons();
+        }
+
+        // --- GEMINI API INTEGRATIONS ---
+
+        // Function to show/hide loading overlay
+        function toggleLoading(show) {
+            if (show) {
+                loadingOverlay.classList.remove('hidden');
+            } else {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        // Function to analyze student answers with Gemini
+        async function analyzeAnswers() {
+            if (!quizResults[currentStudent]) {
+                showAlert('Silakan submit kuis terlebih dahulu sebelum menganalisis.');
+                return;
+            }
+            
+            toggleLoading(true);
+            
+            const result = quizResults[currentStudent];
+            const correctAnswers = result.score;
+            const totalQuestions = result.total;
+            const percentage = result.percentage;
+            
+            // Collect detailed performance data
+            const performanceDetails = questions.map(q => {
+                const userAnswer = result.answers[q.id];
+                const isCorrect = userAnswer === q.correct;
+                const correctAnswerText = q.options[q.correct.charCodeAt(0) - 65];
+                const userAnswerText = userAnswer ? q.options[userAnswer.charCodeAt(0) - 65] : 'Tidak dijawab';
+                return `Pertanyaan: "${q.question}"\nJawaban Benar: "${correctAnswerText}"\nJawaban Siswa: "${userAnswerText}"\nStatus: ${isCorrect ? 'Benar' : 'Salah'}`;
+            }).join('\n\n');
+            
+            // Construct the prompt for Gemini API
+            const prompt = `Anda adalah seorang tutor yang menganalisis hasil kuis seorang siswa. Berikan analisis ringkas dalam satu paragraf berdasarkan data berikut. Jelaskan poin-poin kuat dan area yang perlu ditingkatkan.
+            
+            Data Kuis:
+            - Skor: ${correctAnswers} dari ${totalQuestions}
+            - Persentase: ${percentage}%
+            - Detail Jawaban:
+            ${performanceDetails}
+            
+            Berikan analisis naratif yang ramah dan suportif dalam Bahasa Indonesia.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "Anda adalah asisten AI yang ramah dan suportif." }] },
+            };
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const analysisText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (analysisText) {
+                    document.getElementById('analysisText').textContent = analysisText;
+                    document.getElementById('analysisSummary').classList.remove('hidden');
+                } else {
+                    showAlert('Gagal mendapatkan analisis dari AI.', 'Error');
+                }
+            } catch (error) {
+                console.error('Error calling Gemini API:', error);
+                showAlert('Terjadi kesalahan saat menghubungi server AI. Silakan coba lagi.', 'Error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+        
+        // Functions for AI Question Generator Modal
+        function showAIQuestionGeneratorModal() {
+            document.getElementById('aiQuestionModal').classList.remove('hidden');
+            document.getElementById('aiQuestionModal').classList.add('flex');
+            document.getElementById('aiQuestionTopic').value = '';
+            document.getElementById('aiQuestionResult').classList.add('hidden');
+        }
+        
+        function closeAIQuestionModal() {
+            document.getElementById('aiQuestionModal').classList.add('hidden');
+            document.getElementById('aiQuestionModal').classList.remove('flex');
+        }
+
+        // Generate a new question with Gemini
+        async function generateAIQuestion() {
+            const topic = document.getElementById('aiQuestionTopic').value.trim();
+            if (!topic) {
+                showAlert('Harap masukkan topik untuk membuat soal.');
+                return;
+            }
+            
+            toggleLoading(true);
+
+            // Construct the prompt for generating a new quiz question
+            const prompt = `Buat satu soal pilihan ganda sederhana tentang "${topic}" dalam Bahasa Indonesia. Soal harus memiliki satu pertanyaan, empat pilihan jawaban (A, B, C, D), dan satu jawaban yang benar. Format respons Anda sebagai objek JSON. JANGAN sertakan markdown atau teks tambahan di luar JSON.
+            
+            Contoh format:
+            {
+                "question": "Pertanyaan Anda di sini?",
+                "options": ["Pilihan A", "Pilihan B", "Pilihan C", "Pilihan D"],
+                "correct": "A"
+            }`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "question": { "type": "STRING" },
+                            "options": {
+                                "type": "ARRAY",
+                                "items": { "type": "STRING" }
+                            },
+                            "correct": { "type": "STRING" }
+                        },
+                        "propertyOrdering": ["question", "options", "correct"]
+                    }
+                }
+            };
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (jsonText) {
+                    const newQuestion = JSON.parse(jsonText);
+                    aiGeneratedQuestion = newQuestion;
+                    
+                    const questionHtml = `
+                        <p class="font-semibold">${newQuestion.question}</p>
+                        <ul class="list-disc list-inside mt-2">
+                            ${newQuestion.options.map((opt, i) => `
+                                <li>${String.fromCharCode(65 + i)}. ${opt}</li>
+                            `).join('')}
+                        </ul>
+                        <p class="mt-2 text-sm text-gray-600">Jawaban Benar: <span class="font-bold text-green-600">${newQuestion.correct}</span></p>
+                    `;
+                    document.getElementById('aiGeneratedQuestion').innerHTML = questionHtml;
+                    document.getElementById('aiQuestionResult').classList.remove('hidden');
+                } else {
+                    showAlert('Gagal membuat soal dari AI.', 'Error');
+                }
+            } catch (error) {
+                console.error('Error calling Gemini API:', error);
+                showAlert('Terjadi kesalahan saat menghubungi server AI. Pastikan topik yang Anda masukkan spesifik.', 'Error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+        
+        // Save the AI-generated question
+        function saveAIQuestion() {
+            if (aiGeneratedQuestion) {
+                const newId = questions.length > 0 ? Math.max(...questions.map(q => q.id)) + 1 : 1;
+                questions.push({
+                    id: newId,
+                    question: aiGeneratedQuestion.question,
+                    options: aiGeneratedQuestion.options,
+                    correct: aiGeneratedQuestion.correct
+                });
+                
+                saveData('questions', questions);
+                loadQuestionsList();
+                updateAdminStats();
+                closeAIQuestionModal();
+                showAlert('Soal baru berhasil ditambahkan!', 'Sukses');
+            }
+        }
+
+        // Initial call
+        init();
+    </script>
+</body>
+</html>
